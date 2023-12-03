@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cassert>
 #include <cmath>
+#include <fstream>
 using namespace std;
 
 struct Connection 
@@ -62,16 +63,16 @@ private:
 };
 
 double Neuron::eta = 0.15; // overall net learning rate
-double Neuron::alpha = 0.5 // momentum
+double Neuron::alpha = 0.5; // momentum
 
 void Neuron::updateInputWeights(Layer &prevLayer)
 {
     // The weights to be updated are in the Connection container
     // in the neurons in the preceding layer
 
-     for (unsigned neuron = 0; neuron < prevLayer.size(); ++neuron)
+     for (unsigned n = 0; n < prevLayer.size(); ++n)
      {
-        Neuron &neuron = prevLayer[neuron]; // neuron we modify in previous layer
+        Neuron &neuron = prevLayer[n]; // neuron we modify in previous layer
         double oldDeltaWeight = neuron.m_outputWeights[m_myIndex].deltaWeight;
 
         double newDeltaWeight =
@@ -100,8 +101,9 @@ double Neuron::sumDOW(const Layer &nextLayer) const
     for (unsigned neuron = 0; neuron < nextLayer.size() - 1; ++neuron)
     {
         sum += m_outputWeights[neuron].weight * nextLayer[neuron].m_gradient;
-        return sum;
     }
+    
+    return sum;
 }
 
 void Neuron::calcHiddenGradients(Layer &nextLayer)
@@ -122,7 +124,7 @@ void Neuron::calcOutputGradients(double targetVal)
         derivative of its output val
         f'(a)(x-a)
     */
-   double delta = targetVal - outputVal;
+   double delta = targetVal - m_outputVal;
    m_gradient = delta * Neuron::transferFunctionDerivative(m_outputVal);
 }
 
@@ -150,7 +152,7 @@ void Neuron::feedForward(const Layer &prevLayer)
         sum the prev layer outputs (our inputs)
         include the bias node from previous layer
     */
-   for (unsigned neuron = 0; neuron < prevLayer.size; ++neuron)
+   for (unsigned neuron = 0; neuron < prevLayer.size(); ++neuron)
    {
         sum += prevLayer[neuron].getOutputVal() * 
                prevLayer[neuron].m_outputWeights[m_myIndex].weight;
@@ -193,7 +195,7 @@ private:
     double m_recentAverageSmoothingFactor;
 };
 
-void getResults(vector<double> &resultVals) const
+void Net::getResults(vector<double> &resultVals) const
 {
     resultVals.clear(); // clear previous results
 
@@ -213,7 +215,7 @@ void Net::backProp(const vector<double> &targetVals)
 
         loop through all the output neurons (exclude bias)
     */
-    Layer &outputLayer = m_Layers.back();
+    Layer &outputLayer = m_layers.back();
     m_error = 0.0;
     for (unsigned neuron = 0; neuron < outputLayer.size() - 1; ++neuron)
     {
@@ -279,7 +281,7 @@ void Net::feedForward(const vector<double> &inputVals)
         Layer &prevLayer = m_layers[layerNum - 1];
 
         // avoid each layer's bias neuron, no propagating it
-        for (unsigned neuronNum = 0; neuronNum < m_layers[layerNum].size() - 1: ++neuronNum)
+        for (unsigned neuronNum = 0; neuronNum < m_layers[layerNum].size() - 1; ++neuronNum)
         {
             m_layers[layerNum][neuronNum].feedForward(prevLayer); 
             /* 
@@ -288,7 +290,6 @@ void Net::feedForward(const vector<double> &inputVals)
                 but it makes more sense to pass a pointer to reference Previous Layer
                 that just contains all the previous neurons
             */
-
         }
    }
 }
@@ -325,6 +326,14 @@ Net::Net(const vector<unsigned> &topology)
 
 int main()
 {
+    ifstream FileIn("trainingData.txt");
+    if (!FileIn)
+    {
+        cout << "Unable to open file!" << endl;
+        FileIn.close();
+        return EXIT_FAILURE;
+    }
+
     // topology struct
     /*
         Ex: {3, 2, 1} 
@@ -333,9 +342,6 @@ int main()
         1 neuron in output layer
     */
    vector<unsigned> topology;
-   topology.push_back(3);
-   topology.push_back(2);
-   topology.push_back(1);
 
     // parameters: numLayers, numValues per net
     Net net(topology);
