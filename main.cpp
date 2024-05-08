@@ -4,7 +4,96 @@
 #include <cassert>
 #include <cmath>
 #include <fstream>
+#include <sstream>
 using namespace std;
+
+// class to read training data from a file
+class TrainingData
+{
+public:
+    TrainingData(const string filename);
+    bool isEof(void) { return m_trainingDataFile.eof(); }
+    void getTopology(vector<unsigned> &topology);
+
+    // return number of input values read from the file
+    unsigned getNextInputs(vector<double> &inputVals);
+    unsigned getTargetOutputs(vector<double> &targetOutputVals);
+private:
+    ifstream m_trainingDataFile;
+};
+
+void TrainingData::getTopology(vector<unsigned> &topology)
+{
+    string line;
+    string label;
+
+    getline(m_trainingDataFile, line);
+    stringstream ss(line);
+    ss >> label;
+    if (this -> isEof() || label.compare("topology:") != 0)
+    {
+        abort();
+    }
+
+    while (!ss.eof())
+    {
+        unsigned n;
+        ss >> n;
+        topology.push_back(n);
+    }
+
+    return;
+}
+
+TrainingData::TrainingData(const string filename)
+{
+    m_trainingDataFile.open(filename.c_str());
+}
+
+unsigned TrainingData::getNextInputs(vector<double> &inputVals)
+{
+    inputVals.clear();
+
+    string line;
+    getline(m_trainingDataFile, line);
+    stringstream ss(line);
+
+    string label;
+    ss >> label;
+    if (label.compare("in:") == 0) 
+    {
+        double oneValue;
+        while (ss >> oneValue) 
+        {
+            inputVals.push_back(oneValue);
+        }
+    }
+
+    return inputVals.size();
+}
+
+unsigned TrainingData::getTargetOutputs(vector<double> &targetOutputVals)
+{
+    targetOutputVals.clear();
+
+    string line;
+    getline(m_trainingDataFile, line);
+    stringstream ss(line);
+
+    string label;
+    ss >> label;
+    if (label.compare("out:") == 0) 
+    {
+        double oneValue;
+        while (ss >> oneValue) 
+        {
+            targetOutputVals.push_back(oneValue);
+        }
+    }
+
+    return targetOutputVals.size();
+}
+
 
 struct Connection 
 { // number of output connections to the neuron 
@@ -183,6 +272,7 @@ public:
     void feedForward(const vector<double> &inputVals);
     void backProp(const vector<double> &targetVals);
     void getResults(vector<double> &resultVals) const;
+    double getRecentAverageError(void) const { return m_recentAverageError; }
 
 private:
     // Structure of the actual network
@@ -324,6 +414,17 @@ Net::Net(const vector<unsigned> &topology)
     }
 }
 
+
+void showVectorVals(string label, vector<double> &v)
+{
+    cout << label << " ";
+    for (unsigned i = 0; i < v.size(); ++i)
+    {
+        cout << v[i] << " ";
+    }
+    cout << endl;
+}
+
 int main()
 {
     ifstream FileIn("trainingData.txt");
@@ -334,6 +435,8 @@ int main()
         return EXIT_FAILURE;
     }
 
+    TrainingData trainData("trainingData.txt");
+
     // topology struct
     /*
         Ex: {3, 2, 1} 
@@ -342,20 +445,50 @@ int main()
         1 neuron in output layer
     */
    vector<unsigned> topology;
+   trainData.getTopology(topology);
 
     // parameters: numLayers, numValues per net
-    Net net(topology);
+    Net myNet(topology);
 
     // variable length array
     vector<double> inputVals, targetVals, resultVals; 
+    int trainingPass = 0;
 
-    // to train, feeding forward all the input values
-    net.feedForward(inputVals); // some arr or struct inputVals
-    net.backProp(targetVals); /* after feed fwd, tell net what 
-                                // outputs SHOULD have been
-                                   tune the weights on the nodes */
+    while (!trainData.isEof()) 
+    {
+        ++trainingPass;
+        cout << endl << "Pass: " << trainingPass;
 
-    // Post training, output results                               
-    net.getResults(resultVals); 
+        // Get new input data and feed it forward:
+        if (trainData.getNextInputs(inputVals) != topology[0])
+        {
+            break;
+        }
+
+        showVectorVals(": Inputs:", inputVals);
+        // to train, feeding forward all the input values
+        myNet.feedForward(inputVals); // some array or struct inputVals
+
+        // Collect the net's actual results:
+        myNet.getResults(resultVals);
+        showVectorVals("Outputs:", resultVals);
+
+        //Train the net what the outputs should have been
+        trainData.getTargetOutputs(targetVals);
+        showVectorVals("Targets:", targetVals);
+        assert(targetVals.size() == topology.back());
+
+        myNet.backProp(targetVals); 
+        /*
+            go backwards through the net, tell neurons what the output
+            SHOULD have been. then tine the weights of the nodes
+        */
+
+        // Report how well the training is working
+        cout << "New recent average error: "
+             << myNet.getRecentAverageError() << endl;
+    }
+
+    cout << endl << "Done" << endl;
     return EXIT_SUCCESS;
 }
