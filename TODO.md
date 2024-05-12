@@ -1,0 +1,3 @@
+- True Randomization
+- GUI
+- Visualizer
